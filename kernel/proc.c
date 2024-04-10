@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "pstat.h"
 
 struct cpu cpus[NCPU];
 
@@ -124,6 +125,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->tickets = 1;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -680,4 +682,51 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int setColor(enum COLOR color) {
+
+  if (color < RED || color > VIOLET) {
+    return -1;
+  }
+
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->color = color;
+  release(&p->lock);
+
+  return 0;
+}
+
+int setTickets(int tickets)
+{
+  if (tickets < 1 || tickets > 256) {
+    return -1;
+  }
+
+  struct proc *p = myproc();
+  acquire(&p->lock);
+  p->tickets = tickets;
+  release(&p->lock);
+  return 0;
+}
+
+int getpinfo(struct pstat *pst) {
+  if (!pst) {
+    return -1;
+  }
+
+  acquire(&pid_lock);
+  for(int i = 0; i < NPROC; i++) {
+    strncpy(pst->name[i], proc[i].name, sizeof(proc[i].name) - 1);
+    pst->name[i][sizeof(proc[i].name) - 1] = '\0';
+    pst->pid[i] = proc[i].pid;
+    pst->state[i] = proc[i].state;
+    pst->color[i] = proc[i].color;
+    pst->tickets[i] = proc[i].tickets;
+    pst->inuse[i] = (proc[i].state != UNUSED);
+  }
+  release(&pid_lock);
+
+  return 0;
 }
