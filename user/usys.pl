@@ -40,3 +40,4 @@ entry("setColor");
 entry("setTickets");
 entry("getpinfo");
 entry("ps");
+entry("test");

@@ -24,3 +24,4 @@
 #define SYS_setTickets 23
 #define SYS_getpinfo 24
 #define SYS_ps 25
+#define SYS_test 26

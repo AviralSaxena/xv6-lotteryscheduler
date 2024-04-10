@@ -301,6 +301,9 @@ fork(void)
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
+  // To ensure that a child inherits parent's tickets
+  np->tickets = p->tickets;
+
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
 
@@ -436,6 +439,18 @@ wait(uint64 addr)
   }
 }
 
+static unsigned int s_iSeed = 1;
+
+void srand(unsigned int seed) {
+    s_iSeed = seed;
+}
+
+unsigned int rand() {
+    s_iSeed ^= s_iSeed << 13;
+    s_iSeed ^= s_iSeed >> 17;
+    s_iSeed ^= s_iSeed << 5;
+    return s_iSeed;
+}
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -454,21 +469,33 @@ scheduler(void)
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 
+    int total_tickets = 0;
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
+        total_tickets += p->tickets;
       }
       release(&p->lock);
+    }
+
+    if(total_tickets > 0) {
+      int winning_ticket = rand() % total_tickets;
+      for(p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if(p->state == RUNNABLE) {
+          if((winning_ticket -= p->tickets) < 0) {
+            // Winning process.
+            p->state = RUNNING;
+            p->ticks++;
+            c->proc = p;
+            swtch(&c->context, &p->context);
+            c->proc = 0;
+            release(&p->lock);
+            break;
+          }
+        }
+        release(&p->lock);
+      }
     }
   }
 }
@@ -724,6 +751,7 @@ int getpinfo(struct pstat *pst) {
     pst->state[i] = proc[i].state;
     pst->color[i] = proc[i].color;
     pst->tickets[i] = proc[i].tickets;
+    pst->ticks[i] = proc[i].ticks;
     pst->inuse[i] = (proc[i].state != UNUSED);
   }
   release(&pid_lock);

@@ -42,6 +42,7 @@ int setColor(enum COLOR);
 int setTickets(int);
 int getpinfo(struct pstat*);
 void ps(void);
+void test(void);
 
 // ulib.c
 int stat(const char*, struct stat*);
